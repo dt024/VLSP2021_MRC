@@ -22,18 +22,23 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler, WeightedRandomSampler
 import logging
 from tqdm import tqdm, trange
-from utils import get_predictions, compute_metrics, asMinutes, timeSince, train_enc, valid_enc, test_enc
+from VLSP2021_MRC.utils import get_predictions, compute_metrics, asMinutes, timeSince, train_enc, valid_enc, test_enc
 
 logger = logging.getLogger(__name__)
+RawResult = collections.namedtuple("RawResult",
+                                   ["unique_id", "start_logits", "end_logits"])
+
 
 class Trainer(object):
-    def __init__(self, args, train_dataset=None, dev_dataset=None, dev_answer=None, test_dataset=None):
+    def __init__(self, args, train_dataset=None, dev_dataset=None, dev_answer=None, test_dataset=None, tokenizer=None):
         self.args = args
-        self.train_dataset = train_enc(train_dataset)
-        self.eval_features, self.eval_dataset = valid_enc(dev_dataset)
-        self.test_features, self.test_dataset = test_enc(test_dataset)
+        self.train_dataset = train_enc(train_dataset, tokenizer, self.args)
+        if dev_dataset is not None:
+          self.eval_features, self.eval_dataset = valid_enc(dev_dataset, tokenizer, self.args)
+        if test_dataset is not None:  
+          self.test_features, self.test_dataset = test_enc(test_dataset, tokenizer, self.args)
         self.epochs_stop = args.early_stop
-        self.answers = dev_answers
+        self.answers = dev_answer
 
         # self.config = BertConfig.from_pretrained(
         #     args.model_name_or_path,
@@ -71,18 +76,18 @@ class Trainer(object):
       optimizer_grouped_parameters = [
           {
               "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
-              "weight_decay": args.weight_decay,
+              "weight_decay": self.args.weight_decay,
           },
           {
               "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
               "weight_decay": 0.0,
           },
       ]
-      optimizer = optim.AdamW(
-          optimizer_grouped_parameters,
-          lr=self.args.learning_rate,
-          eps=self.args.adam_epsilon,
-      )
+      # optimizer = optim.AdamW(
+      #     optimizer_grouped_parameters,
+      #     lr=self.args.learning_rate,
+      #     eps=self.args.adam_epsilon,
+      # )
       optimizer = AdamW(self.model.parameters(), lr=self.args.learning_rate)
       scheduler = get_linear_schedule_with_warmup(
           optimizer,
@@ -182,14 +187,14 @@ class Trainer(object):
 
       return global_step, tr_loss / global_step
 
-    def evaluating(self, mode, out_pred=False):
+    def evaluate(self, mode, out_pred=False):
             # We use test dataset because semeval doesn't have dev dataset
             if mode == "test":
                 features = self.test_features 
-				datasets = self.test_dataset
+                datasets = self.test_dataset
             elif mode == "dev":
                 features = self.eval_features
-				datasets = self.eval_dataset
+                datasets = self.eval_dataset
             else:
                 raise Exception("Only dev and test dataset available")
 
@@ -202,12 +207,12 @@ class Trainer(object):
             eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_start, all_end, all_example_index)
 
             eval_sampler = SequentialSampler(eval_data)
-            eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batchsize)
+            eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=self.args.eval_batch_size)
 
             # Eval!
             logger.info("***** Running evaluation on %s dataset *****", mode)
-            logger.info("  Num examples = %d", len(dataset))
-            logger.info("  Batch size = %d", args.eval_batchsize)
+            logger.info("  Num examples = %d", len(eval_data))
+            logger.info("  Batch size = %d", self.args.eval_batch_size)
             eval_loss = 0.0
 
             self.model.eval()
@@ -244,18 +249,18 @@ class Trainer(object):
 
             predicts = get_predictions(datasets, features, all_results,
                                       self.args.n_best_size, self.args.max_answer_length,
-                                      self.args.do_lower_case, self.args.verbose_logging,
+                                      self.args.do_lower_case, False,
                                       self.args.version_2_with_negative, self.args.null_score_diff_threshold)
 
             # return predicts
             # print(tmp_eval_loss)
-			if mode == "test":
-				return predicts
+            if mode == "test":
+              return predicts
             result = compute_metrics(predicts, self.answers)
             eval_loss = tmp_eval_loss.item() / len(eval_dataloader)
             logger.info(
-                        f"VAL: [{nb_eval_steps}/{len(eval_dataloader)}] "
-                        f"Elapsed {timeSince(start, float(nb_eval_steps + 1) / len(eval_dataloader)):s} "
+                        f"VAL: [{len(eval_dataloader)}/{len(eval_dataloader)}] "
+                        f"Elapsed {timeSince(start, float(len(eval_dataloader)) / len(eval_dataloader)):s} "
                         f"Loss: {eval_loss:.4f} "
                         )
 

@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 import collections
 import math
+import time
 from datasets import load_metric
 import numpy as np
 import logging
+import random
 from tqdm import tqdm, trange
 import torch
 from transformers import AutoTokenizer, AutoConfig, BertConfig, BertTokenizer, BasicTokenizer
@@ -12,8 +14,15 @@ from transformers.data.processors.squad import SquadResult, SquadV1Processor, Sq
 from transformers import squad_convert_examples_to_features
 
 
-def train_enc(qas_ids, questions, titles, contexts, answers, is_impossibles, s_poses, tokenizer, args):
+def train_enc(train_data, tokenizer, args):
     datas = []
+    qas_ids = train_data[0]
+    questions = train_data[1]
+    titles = train_data[2]
+    contexts = train_data[3]
+    answers = train_data[4]
+    is_impossibles = train_data[5]
+    s_poses = train_data[6]
     for i in range(len(qas_ids)):
         data = SquadExample(qas_id=qas_ids[i], question_text=questions[i], context_text=contexts[i], title=titles[i], answer_text=answers[i], answers=[{'answer_start':s_poses[i],'text':answers[i]}], is_impossible=is_impossibles[i], start_position_character=s_poses[i])
         datas.append(data)
@@ -37,8 +46,16 @@ def train_enc(qas_ids, questions, titles, contexts, answers, is_impossibles, s_p
     train_enc = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_start_pos, all_end_pos)
     return train_enc
 
-def valid_enc(qas_ids, questions, titles, contexts, answers, is_impossibles, s_poses, tokenizer, args):
+def valid_enc(val_data, tokenizer, args):
     datas = []
+    qas_ids = val_data[0]
+    questions = val_data[1]
+    titles = val_data[2]
+    contexts = val_data[3]
+    answers = val_data[4]
+    is_impossibles = val_data[5]
+    s_poses = val_data[6]
+
     for i in range(len(qas_ids)):
         data = SquadExample(qas_id=qas_ids[i], question_text=questions[i], context_text=contexts[i], title=titles[i], answer_text=answers[i], answers=[{'answer_start':s_poses[i],'text':answers[i]}], is_impossible=is_impossibles[i], start_position_character=s_poses[i])
         datas.append(data)
@@ -54,8 +71,13 @@ def valid_enc(qas_ids, questions, titles, contexts, answers, is_impossibles, s_p
     
     return features, datas
 
-def test_enc(qas_ids, questions, titles, contexts, tokenizer, args):
+def test_enc(test_data, tokenizer, args):
     datas = []
+    qas_ids = test_data[0]
+    questions = test_data[1]
+    titles = test_data[2]
+    contexts = test_data[3]
+
     for i in range(len(qas_ids)):
         data = SquadExample(qas_id=qas_ids[i], question_text=questions[i], context_text=contexts[i], title=titles[i], answer_text="", answers=[{'answer_start':-1,'text':""}], is_impossible=False, start_position_character=-1)
         datas.append(data)
@@ -411,10 +433,3 @@ def init_logger():
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
-
-def set_seed(args):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if not args.no_cuda and torch.cuda.is_available():
-        torch.cuda.manual_seed_all(args.seed)
