@@ -9,7 +9,7 @@ import os
 import time
 import datetime
 import random
-from transformers import BertForQuestionAnswering, AutoTokenizer, AutoConfig, AutoModel, BertModel, BertPreTrainedModel, BertConfig, RobertaConfig, RobertaModel, BertTokenizer, BertModel, RobertaTokenizer
+from transformers import AutoModelForQuestionAnswering, BertForQuestionAnswering, AutoTokenizer, AutoConfig, AutoModel, BertModel, BertPreTrainedModel, BertConfig, RobertaConfig, RobertaModel, BertTokenizer, BertModel, RobertaTokenizer
 from transformers import AdamW, BertConfig, get_linear_schedule_with_warmup
 import torch.nn as nn
 from torch.autograd import Function
@@ -22,7 +22,7 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler, WeightedRandomSampler
 import logging
 from tqdm import tqdm, trange
-from VLSP2021_MRC.utils import get_predictions, compute_metrics, asMinutes, timeSince, train_enc, valid_enc, test_enc
+from utils import get_predictions, compute_metrics, asMinutes, timeSince, train_enc, valid_enc, test_enc
 
 logger = logging.getLogger(__name__)
 RawResult = collections.namedtuple("RawResult",
@@ -47,8 +47,8 @@ class Trainer(object):
         #     output_hidden_states=True,
         #     output_attentions=True,
         # )
-        self.model = BertForQuestionAnswering.from_pretrained(args.model_name_or_path)
-
+#         self.model = BertForQuestionAnswering.from_pretrained(args.model_name_or_path)
+        self.model = AutoModelForQuestionAnswering.from_pretrained(args.model_name_or_path)
         # self.model.resize_token_embeddings(len(tokenizer)) 
 
         # GPU or CPU
